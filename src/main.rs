@@ -314,7 +314,7 @@ fn gather_validated_migrations(args: &Args, client: &mut postgres::Client) -> Re
 fn compute_diff(source: &Config, target: &Config) -> Result<String> {
 	let output = std::process::Command::new("migra")
 		.arg("--unsafe")
-		.arg("--with-privileges")
+//		.arg("--with-privileges")
 		.arg(to_connection_string(source))
 		.arg(to_connection_string(target))
 		.output()
@@ -348,14 +348,12 @@ fn command_generate(args: &Args, raw_description: &str) -> Result<String> {
 
 	let description_slug = make_slug(raw_description);
 	let current_version = create_timestamp();
-
 	let source = TempDb::new(&dbname, "migrations", &args.pg_url)?;
 	apply_sql_files(&source.config, migration_files.into_iter().map(|migration_file| migration_file.file_path).collect())?;
 	let target = TempDb::new(&dbname, "schema", &args.pg_url)?;
 	apply_sql_files(&target.config, list_sql_files(&args.schema_directory)?)?;
 
 	let generated_migration = compute_diff(&source.config, &target.config)?;
-
 	fs::File::create(format!("./{}/{current_version}.{previous_version}.{description_slug}.sql", args.migrations_directory))?
 		.write_all(generated_migration.as_bytes())?;
 
