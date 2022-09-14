@@ -10,8 +10,11 @@ test:
 full_test:
 	docker exec -it migrator-dev cargo test -- --ignored
 
+build-out:
+	DOCKER_BUILDKIT=1 docker build -f buildout.Dockerfile -t hakonhc/postgres_migrator --output out .
+
 build:
-	docker build -f release.Dockerfile -t blainehansen/postgres_migrator .
+	docker build -f release.Dockerfile -t hakonhc/postgres_migrator .
 
 integration_test: test full_test build
 	#!/usr/bin/env bash
