@@ -343,13 +343,14 @@ fn apply_sql_files(config: &Config, sql_files: Vec<PathBuf>) -> Result<()> {
 fn command_generate(args: &Args, raw_description: &str) -> Result<String> {
 	let mut client = args.pg_url.connect(postgres::NoTls)?;
 	let dbname = args.pg_url.get_dbname().ok_or(anyhow!("need a dbname to run generate command"))?;
-	let (migration_files, previous_version) = gather_validated_migrations(&args, &mut client)?;
+	let (_migration_files, previous_version) = gather_validated_migrations(&args, &mut client)?;
 	let previous_version = previous_version.unwrap_or_else(get_null_string);
 
 	let description_slug = make_slug(raw_description);
 	let current_version = create_timestamp();
 	let source = TempDb::new(&dbname, "migrations", &args.pg_url)?;
-	apply_sql_files(&source.config, migration_files.into_iter().map(|migration_file| migration_file.file_path).collect())?;
+	let mut client = source.config.connect(postgres::NoTls)?;
+	command_migrate(&args, &mut client)?;
 	let target = TempDb::new(&dbname, "schema", &args.pg_url)?;
 	apply_sql_files(&target.config, list_sql_files(&args.schema_directory)?)?;
 
@@ -377,7 +378,6 @@ fn command_compact(args: &Args) -> Result<()> {
 	"))?;
 	Ok(())
 }
-
 
 fn command_migrate(args: &Args, client: &mut postgres::Client) -> Result<()> {
 	let migration_files = gather_validated_migrations(&args, client)?.0;
