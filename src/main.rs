@@ -435,7 +435,8 @@ fn ensure_db(args: &Args, dbname: &str, base_config: &Config, backend: Backend) 
 	match backend {
 		Backend::Migrations => {
 			let temp = TempDb::new(dbname, "migrations", base_config)?;
-			apply_sql_files(&temp.config, list_sql_files(&args.migrations_directory)?)?;
+			let mut client = temp.config.connect(postgres::NoTls)?;
+			command_migrate(&args, &mut client)?;
 			let config = temp.config.clone();
 			Ok((Some(temp), config))
 		},
