@@ -350,7 +350,7 @@ fn command_generate(args: &Args, raw_description: &str) -> Result<String> {
 	let current_version = create_timestamp();
 	let source = TempDb::new(&dbname, "migrations", &args.pg_url)?;
 	let mut client = source.config.connect(postgres::NoTls)?;
-	command_migrate(&args, &mut client)?;
+	command_migrate(&args, &mut client, false)?;
 	let target = TempDb::new(&dbname, "schema", &args.pg_url)?;
 	apply_sql_files(&target.config, list_sql_files(&args.schema_directory)?)?;
 
@@ -365,7 +365,7 @@ fn command_generate(args: &Args, raw_description: &str) -> Result<String> {
 fn command_compact(args: &Args) -> Result<()> {
 	let mut client = args.pg_url.connect(postgres::NoTls)?;
 	command_generate(args, "ensuring_current")?;
-	command_migrate(args, &mut client)?;
+	command_migrate(args, &mut client, true)?;
 
 	purge_migrations_directory(&args.migrations_directory)?;
 	ensure_migrations_directory(&args.migrations_directory)?;
@@ -379,16 +379,19 @@ fn command_compact(args: &Args) -> Result<()> {
 	Ok(())
 }
 
-fn command_migrate(args: &Args, client: &mut postgres::Client) -> Result<()> {
+fn command_migrate(args: &Args, client: &mut postgres::Client, print_performing: bool) -> Result<()> {
 	let migration_files = gather_validated_migrations(&args, client)?.0;
 
 	let actual_version: Option<String> = client
 		.query_one("select max(current_version) as current_version from _schema_versions", &[])?
 		.get("current_version");
 
+	let mut migrations_perfomed = 0;
 	for MigrationFile{display_file_path, file_path, current_version, previous_version} in migration_files {
 		let mut perform_migration = || -> Result<()> {
-			println!("performing {}", display_file_path);
+			if print_performing == true {
+				println!("performing {}", display_file_path);
+			}
 			let mut file = fs::File::open(&file_path)?;
 			let mut migration_query = String::new();
 			file.read_to_string(&mut migration_query)?;
@@ -399,6 +402,7 @@ fn command_migrate(args: &Args, client: &mut postgres::Client) -> Result<()> {
 				insert into _schema_versions (current_version, previous_version) values ({current_version}, {previous_version})
 			"))?;
 			transaction.commit()?;
+			migrations_perfomed = migrations_perfomed + 1;
 
 			Ok(())
 		};
@@ -408,6 +412,10 @@ fn command_migrate(args: &Args, client: &mut postgres::Client) -> Result<()> {
 			Some(ref actual_version) if &current_version > actual_version => perform_migration()?,
 			_ => println!("not performing {}", display_file_path),
 		}
+	}
+
+	if migrations_perfomed == 0 {
+		println!("No migrations perfomed, database up to date.");
 	}
 
 	Ok(())
@@ -436,7 +444,7 @@ fn ensure_db(args: &Args, dbname: &str, base_config: &Config, backend: Backend) 
 		Backend::Migrations => {
 			let temp = TempDb::new(dbname, "migrations", base_config)?;
 			let mut client = temp.config.connect(postgres::NoTls)?;
-			command_migrate(&args, &mut client)?;
+			command_migrate(&args, &mut client, false)?;
 			let config = temp.config.clone();
 			Ok((Some(temp), config))
 		},
@@ -582,7 +590,7 @@ fn main() -> Result<()> {
 		},
 		Command::Migrate => {
 			let mut client = args.pg_url.connect(postgres::NoTls)?;
-			command_migrate(&args, &mut client)?;
+			command_migrate(&args, &mut client, true)?;
 		},
 		Command::Compact => {
 			command_compact(&args)?;
