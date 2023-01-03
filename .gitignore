@@ -3,3 +3,4 @@ migrations
 /target
 
 *.local.*
+.idea/
