@@ -584,6 +584,14 @@ enum Backend {
 fn main() -> Result<()> {
 	let args = Args::parse();
 
+	let localhost = postgres::config::Host::Tcp("localhost".to_string());
+	let host = match args.pg_url.get_hosts().first().unwrap_or(&localhost) {
+		postgres::config::Host::Tcp(host) => host,
+		postgres::config::Host::Unix(_) => panic!("unix sockets not supported"),
+	};
+
+	println!("Pg hosts {}", host);
+
 	match args.command {
 		Command::Generate{ref migration_description} => {
 			command_generate(&args, &migration_description)?;
