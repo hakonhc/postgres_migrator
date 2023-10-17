@@ -26,3 +26,7 @@ serial_test = "0.8"
 # assert_cmd = "*"
 # https://docs.rs/assert_fs/latest/assert_fs/
 # assert_fs = "*"
+
+[[bin]]
+name = "main"
+path = "src/main.rs"

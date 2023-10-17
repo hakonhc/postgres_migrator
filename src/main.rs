@@ -127,7 +127,7 @@ impl MigrationFile {
 			let display_file_path = file_path.to_string_lossy().to_string();
 
 			// first parse the file_name and version strings
-			let file_name = file_path.file_name().ok_or_else(|| anyhow!("no file name forst this path: {display_file_path}"))?;
+			let file_name = file_path.file_name().ok_or_else(|| anyhow!("no file name for this path: {display_file_path}"))?;
 			let file_name = file_name.to_str().ok_or_else(|| anyhow!("file name isn't valid unicode: {display_file_path}"))?;
 			let mut portions = file_name.split(".");
 			let current_version = portions.next()
@@ -295,8 +295,10 @@ fn test_config_try_from_str() {
 fn gather_validated_migrations(args: &Args, client: &mut postgres::Client) -> Result<(Vec<MigrationFile>, Option<String>)> {
 	client.batch_execute("
 		create table if not exists _schema_versions (
-			current_version char(14) not null unique,
-			previous_version char(14) references _schema_versions(current_version) unique,
+			current_version 	char(14) not null unique,
+			previous_version 	char(14) references _schema_versions(current_version) unique,
+  			date_run         	timestamp with time zone not null DEFAULT now(),
+			name             	text not null,
 			check (current_version > previous_version)
 		);
 		create unique index if not exists i_schema_versions on _schema_versions ((previous_version is null)) where previous_version is null
@@ -374,7 +376,7 @@ fn command_compact(args: &Args) -> Result<()> {
 
 	client.batch_execute(&format!("
 		truncate table _schema_versions;
-		insert into _schema_versions (current_version, previous_version) values ({current_version}, null)
+		insert into _schema_versions (current_version, previous_version, name) values ({current_version}, null, 'compacted_initial')
 	"))?;
 	Ok(())
 }
@@ -399,7 +401,7 @@ fn command_migrate(args: &Args, client: &mut postgres::Client, print_performing:
 			let mut transaction = client.transaction()?;
 			transaction.batch_execute(&migration_query)?;
 			transaction.batch_execute(&format!("
-				insert into _schema_versions (current_version, previous_version) values ({current_version}, {previous_version})
+				insert into _schema_versions (current_version, previous_version, name) values ({current_version}, {previous_version}, '{display_file_path}')
 			"))?;
 			transaction.commit()?;
 			migrations_perfomed = migrations_perfomed + 1;
@@ -583,14 +585,6 @@ enum Backend {
 
 fn main() -> Result<()> {
 	let args = Args::parse();
-
-	let localhost = postgres::config::Host::Tcp("localhost".to_string());
-	let host = match args.pg_url.get_hosts().first().unwrap_or(&localhost) {
-		postgres::config::Host::Tcp(host) => host,
-		postgres::config::Host::Unix(_) => panic!("unix sockets not supported"),
-	};
-
-	println!("Pg hosts {}", host);
 
 	match args.command {
 		Command::Generate{ref migration_description} => {
